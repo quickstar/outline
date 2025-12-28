@@ -122,6 +122,11 @@ allow(User, "publish", Document, (actor, document) =>
 allow(User, "manageUsers", Document, (actor, document) =>
   and(
     !document?.template,
+    // Viewers/Guests cannot manage users when directory isolation is enabled
+    !(
+      (actor.isViewer || actor.isGuest) &&
+      actor.team?.getPreference(TeamPreference.RestrictExternalDirectory)
+    ),
     can(actor, "update", document),
     or(
       includesMembership(document, [DocumentPermission.Admin]),

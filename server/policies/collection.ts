@@ -1,5 +1,5 @@
 import invariant from "invariant";
-import { CollectionPermission } from "@shared/types";
+import { CollectionPermission, TeamPreference } from "@shared/types";
 import { Collection, User, Team } from "@server/models";
 import { allow } from "./cancan";
 import { and, isTeamAdmin, isTeamModel, isTeamMutable, or } from "./utils";
@@ -147,6 +147,11 @@ allow(User, ["update", "export", "archive"], Collection, (user, collection) =>
   and(
     !!collection,
     !!collection?.isActive,
+    // Viewers/Guests cannot update collections when directory isolation is enabled
+    !(
+      (user.isViewer || user.isGuest) &&
+      user.team?.getPreference(TeamPreference.RestrictExternalDirectory)
+    ),
     or(
       isTeamAdmin(user, collection),
       includesMembership(collection, [CollectionPermission.Admin])

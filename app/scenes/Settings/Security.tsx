@@ -127,6 +127,17 @@ function Security() {
     [saveData, team.preferences]
   );
 
+  const handleRestrictExternalDirectoryChange = React.useCallback(
+    async (checked: boolean) => {
+      const preferences = {
+        ...team.preferences,
+        [TeamPreference.RestrictExternalDirectory]: checked,
+      };
+      await saveData({ preferences });
+    },
+    [saveData, team.preferences]
+  );
+
   const handleMembersCanDeleteAccountChange = React.useCallback(
     async (checked: boolean) => {
       const preferences = {
@@ -256,6 +267,21 @@ function Security() {
           id={TeamPreference.ViewersCanExport}
           checked={team.getPreference(TeamPreference.ViewersCanExport)}
           onChange={handleViewersCanExportChange}
+        />
+      </SettingRow>
+      <SettingRow
+        label={t("Restrict external directory")}
+        name={TeamPreference.RestrictExternalDirectory}
+        description={t(
+          "When enabled, viewers and guests can only see users and groups they share group membership with"
+        )}
+      >
+        <Switch
+          id={TeamPreference.RestrictExternalDirectory}
+          checked={team.getPreference(
+            TeamPreference.RestrictExternalDirectory
+          )}
+          onChange={handleRestrictExternalDirectoryChange}
         />
       </SettingRow>
       <SettingRow

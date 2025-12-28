@@ -2,7 +2,7 @@ import Router from "koa-router";
 import type { WhereOptions } from "sequelize";
 import { Op } from "sequelize";
 import { MAX_AVATAR_DISPLAY } from "@shared/constants";
-import { GroupPermission } from "@shared/types";
+import { GroupPermission, TeamPreference } from "@shared/types";
 import auth from "@server/middlewares/authentication";
 import { rateLimiter } from "@server/middlewares/rateLimiter";
 import { transaction } from "@server/middlewares/transaction";
@@ -32,9 +32,25 @@ router.post(
     const { user } = ctx.state.auth;
     authorize(user, "listGroups", user.team);
 
+    // Check if directory isolation is enabled for Viewers/Guests
+    const restrictDirectory =
+      (user.isViewer || user.isGuest) &&
+      !!user.team?.getPreference(TeamPreference.RestrictExternalDirectory);
+
     let where: WhereOptions<Group> = {
       teamId: user.teamId,
     };
+
+    // If directory is restricted, scope to user's groups
+    if (restrictDirectory) {
+      const userGroupIds = await user.groupIds();
+      where = {
+        ...where,
+        id: {
+          [Op.in]: userGroupIds,
+        },
+      };
+    }
 
     if (name) {
       where = {

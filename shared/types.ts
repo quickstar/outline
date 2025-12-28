@@ -310,6 +310,8 @@ export enum TeamPreference {
   TocPosition = "tocPosition",
   /** Whether to prevent shared documents from being embedded in iframes on external websites. */
   PreventDocumentEmbedding = "preventDocumentEmbedding",
+  /** Whether Viewers and Guests can only see users/groups they share group membership with. */
+  RestrictExternalDirectory = "restrictExternalDirectory",
 }
 
 export type TeamPreferences = {
@@ -324,6 +326,7 @@ export type TeamPreferences = {
   [TeamPreference.CustomTheme]?: Partial<CustomTheme>;
   [TeamPreference.TocPosition]?: TOCPosition;
   [TeamPreference.PreventDocumentEmbedding]?: boolean;
+  [TeamPreference.RestrictExternalDirectory]?: boolean;
 };
 
 export enum NavigationNodeType {

@@ -2,7 +2,7 @@ import Router from "koa-router";
 import type { WhereOptions } from "sequelize";
 import { Op, Sequelize } from "sequelize";
 import type { UserPreference } from "@shared/types";
-import { UserRole } from "@shared/types";
+import { TeamPreference, UserRole } from "@shared/types";
 import { UserRoleHelper } from "@shared/utils/UserRoleHelper";
 import { settingsPath } from "@shared/utils/routeHelpers";
 import { UserValidation } from "@shared/validations";
@@ -17,7 +17,7 @@ import auth from "@server/middlewares/authentication";
 import { rateLimiter } from "@server/middlewares/rateLimiter";
 import { transaction } from "@server/middlewares/transaction";
 import validate from "@server/middlewares/validate";
-import { User, Team } from "@server/models";
+import { GroupUser, User, Team } from "@server/models";
 import { UserFlag } from "@server/models/User";
 import { can, authorize } from "@server/policies";
 import { presentUser, presentPolicies } from "@server/presenters";
@@ -40,9 +40,48 @@ router.post(
       ctx.input.body;
 
     const actor = ctx.state.auth.user;
+    authorize(actor, "listUsers", actor.team);
+
+    // Check if directory isolation is enabled for Viewers/Guests
+    const restrictDirectory =
+      (actor.isViewer || actor.isGuest) &&
+      !!actor.team?.getPreference(TeamPreference.RestrictExternalDirectory);
+
     let where: WhereOptions<User> = {
       teamId: actor.teamId,
     };
+
+    // If directory is restricted, scope to actor's groups
+    if (restrictDirectory) {
+      const actorGroupIds = await actor.groupIds();
+      if (actorGroupIds.length > 0) {
+        const groupUsers = await GroupUser.findAll({
+          where: {
+            groupId: {
+              [Op.in]: actorGroupIds,
+            },
+          },
+          attributes: ["userId"],
+        });
+        const allowedUserIds = [
+          ...new Set(groupUsers.map((gu) => gu.userId)),
+          actor.id,
+        ];
+
+        where = {
+          ...where,
+          id: {
+            [Op.in]: allowedUserIds,
+          },
+        };
+      } else {
+        // Actor has no groups, only show themselves
+        where = {
+          ...where,
+          id: actor.id,
+        };
+      }
+    }
 
     // Filter out suspended users if we're not an admin
     if (!actor.isAdmin) {

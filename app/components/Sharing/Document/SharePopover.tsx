@@ -5,7 +5,7 @@ import { BackIcon } from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { DocumentPermission } from "@shared/types";
+import { DocumentPermission, TeamPreference } from "@shared/types";
 import type Document from "~/models/Document";
 import Group from "~/models/Group";
 import User from "~/models/User";
@@ -15,6 +15,7 @@ import { createAction } from "~/actions";
 import { UserSection } from "~/actions/sections";
 import useBoolean from "~/hooks/useBoolean";
 import useCurrentTeam from "~/hooks/useCurrentTeam";
+import useCurrentUser from "~/hooks/useCurrentUser";
 import useKeyDown from "~/hooks/useKeyDown";
 import usePolicy from "~/hooks/usePolicy";
 import usePrevious from "~/hooks/usePrevious";
@@ -39,9 +40,15 @@ type Props = {
 
 function SharePopover({ document, onRequestClose, visible }: Props) {
   const team = useCurrentTeam();
+  const user = useCurrentUser();
   const { t } = useTranslation();
   const can = usePolicy(document);
   const { shares } = useStores();
+
+  // Additional client-side check: Viewers/Guests cannot add users when directory isolation is enabled
+  const restrictDirectory =
+    (user.isViewer || user.isGuest) &&
+    !!team.getPreference(TeamPreference.RestrictExternalDirectory);
   const share = shares.getByDocumentId(document.id);
   const sharedParent = shares.getByDocumentParents(document);
   const [hasRendered, setHasRendered] = React.useState(visible);
@@ -344,9 +351,12 @@ function SharePopover({ document, onRequestClose, visible }: Props) {
     />
   );
 
+  // Show picker only if user can manage users AND is not restricted
+  const canShowPicker = can.manageUsers && !restrictDirectory;
+
   return (
     <Wrapper>
-      {can.manageUsers && (
+      {canShowPicker && (
         <SearchInput
           ref={searchInputRef}
           onChange={handleQuery}
@@ -358,7 +368,7 @@ function SharePopover({ document, onRequestClose, visible }: Props) {
         />
       )}
 
-      {picker && (
+      {picker && canShowPicker && (
         <Suggestions
           ref={suggestionsRef}
           document={document}

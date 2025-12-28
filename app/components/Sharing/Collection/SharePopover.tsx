@@ -5,7 +5,7 @@ import { BackIcon } from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { CollectionPermission } from "@shared/types";
+import { CollectionPermission, TeamPreference } from "@shared/types";
 import type Collection from "~/models/Collection";
 import Group from "~/models/Group";
 import User from "~/models/User";
@@ -15,6 +15,7 @@ import { createAction } from "~/actions";
 import { UserSection } from "~/actions/sections";
 import useBoolean from "~/hooks/useBoolean";
 import useCurrentTeam from "~/hooks/useCurrentTeam";
+import useCurrentUser from "~/hooks/useCurrentUser";
 import useKeyDown from "~/hooks/useKeyDown";
 import usePolicy from "~/hooks/usePolicy";
 import usePrevious from "~/hooks/usePrevious";
@@ -39,6 +40,7 @@ type Props = {
 
 function SharePopover({ collection, visible, onRequestClose }: Props) {
   const team = useCurrentTeam();
+  const user = useCurrentUser();
   const { groupMemberships, users, groups, memberships, shares } = useStores();
   const { t } = useTranslation();
   const can = usePolicy(collection);
@@ -50,6 +52,11 @@ function SharePopover({ collection, visible, onRequestClose }: Props) {
   const [permission, setPermission] = React.useState<CollectionPermission>(
     CollectionPermission.Read
   );
+
+  // Additional client-side check: Viewers/Guests cannot add users when directory isolation is enabled
+  const restrictDirectory =
+    (user.isViewer || user.isGuest) &&
+    !!team.getPreference(TeamPreference.RestrictExternalDirectory);
 
   const share = shares.getByCollectionId(collection.id);
   const prevPendingIds = usePrevious(pendingIds);
@@ -336,9 +343,12 @@ function SharePopover({ collection, visible, onRequestClose }: Props) {
     />
   );
 
+  // Show picker only if user can update AND is not restricted
+  const canShowPicker = can.update && !restrictDirectory;
+
   return (
     <Wrapper>
-      {can.update && (
+      {canShowPicker && (
         <SearchInput
           ref={searchInputRef}
           onChange={handleQuery}
@@ -350,7 +360,7 @@ function SharePopover({ collection, visible, onRequestClose }: Props) {
         />
       )}
 
-      {picker && (
+      {picker && canShowPicker && (
         <Suggestions
           ref={suggestionsRef}
           query={query}
