@@ -50,6 +50,7 @@ function SharePopover({
   const { t } = useTranslation();
   const can = usePolicy(document);
   const { shares } = useStores();
+
   const share = shares.getByDocumentId(document.id);
   const sharedParent = shares.getByDocumentParents(document);
   const [hasRendered, setHasRendered] = React.useState(visible);
@@ -367,9 +368,11 @@ function SharePopover({
     />
   );
 
+  const canShowPicker = can.manageUsers;
+
   return (
     <Wrapper ref={wrapperRef} tabIndex={-1}>
-      {can.manageUsers && (
+      {canShowPicker && (
         <SearchInput
           ref={searchInputRef}
           onChange={handleQuery}
@@ -381,7 +384,7 @@ function SharePopover({
         />
       )}
 
-      {picker && (
+      {picker && canShowPicker && (
         <Suggestions
           ref={suggestionsRef}
           document={document}

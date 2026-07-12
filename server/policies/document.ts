@@ -5,6 +5,7 @@ import {
   TeamPreference,
 } from "@shared/types";
 import { Document, Revision, User, Team } from "@server/models";
+import { isDiscoveryRestricted } from "@server/utils/DiscoveryScope";
 import { allow, cannot, can } from "./cancan";
 import { and, isTeamAdmin, isTeamModel, isTeamMutable, or } from "./utils";
 
@@ -113,6 +114,7 @@ allow(User, "manageUsers", Document, (actor, document) =>
   and(
     isTeamMutable(actor),
     can(actor, "read", document),
+    !isDiscoveryRestricted(actor),
     or(
       includesMembership(document, [DocumentPermission.Admin]),
       isTeamAdmin(actor, document),

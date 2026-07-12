@@ -1,4 +1,5 @@
 import { faker } from "@faker-js/faker";
+import { TeamPreference } from "@shared/types";
 import { TeamDomain } from "@server/models";
 import {
   buildAdmin,
@@ -40,6 +41,24 @@ describe("teams.create", () => {
 });
 
 describe("#team.update", () => {
+  it("should update user and group discovery restriction", async () => {
+    const team = await buildTeam();
+    const admin = await buildAdmin({ teamId: team.id });
+    const res = await server.post("/api/team.update", admin, {
+      body: {
+        preferences: {
+          [TeamPreference.RestrictUserAndGroupDiscovery]: true,
+        },
+      },
+    });
+
+    expect(res.status).toEqual(200);
+    await team.reload();
+    expect(
+      team.getPreference(TeamPreference.RestrictUserAndGroupDiscovery)
+    ).toEqual(true);
+  });
+
   it("should update team details", async () => {
     const admin = await buildAdmin();
     const name = faker.company.name();

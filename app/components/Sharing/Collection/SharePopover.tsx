@@ -360,9 +360,11 @@ function SharePopover({
     />
   );
 
+  const canShowPicker = can.manageUsers;
+
   return (
     <Wrapper ref={wrapperRef} tabIndex={-1}>
-      {can.update && (
+      {canShowPicker && (
         <SearchInput
           ref={searchInputRef}
           onChange={handleQuery}
@@ -374,7 +376,7 @@ function SharePopover({
         />
       )}
 
-      {picker && (
+      {picker && canShowPicker && (
         <Suggestions
           ref={suggestionsRef}
           query={query}

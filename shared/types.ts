@@ -449,6 +449,8 @@ export enum TeamPreference {
   MCP = "mcp",
   /** List of disabled embed provider titles. */
   DisabledEmbeds = "disabledEmbeds",
+  /** Whether viewers and guests can only discover users and groups with shared access. */
+  RestrictUserAndGroupDiscovery = "restrictUserAndGroupDiscovery",
 }
 
 export type TeamPreferences = {
@@ -466,6 +468,7 @@ export type TeamPreferences = {
   [TeamPreference.EmailDisplay]?: EmailDisplay;
   [TeamPreference.MCP]?: boolean;
   [TeamPreference.DisabledEmbeds]?: string[];
+  [TeamPreference.RestrictUserAndGroupDiscovery]?: boolean;
 };
 
 export enum NavigationNodeType {

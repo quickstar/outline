@@ -3,11 +3,17 @@ import { AuthenticationProvider, Event, ExternalGroup } from "@server/models";
 import {
   buildUser,
   buildAdmin,
+  buildCollection,
   buildGroup,
   buildGroupUser,
+  buildViewer,
 } from "@server/test/factories";
 import { getTestServer } from "@server/test/support";
-import { GroupPermission } from "@shared/types";
+import {
+  CollectionPermission,
+  GroupPermission,
+  TeamPreference,
+} from "@shared/types";
 
 const server = getTestServer();
 
@@ -178,6 +184,50 @@ describe("#groups.update", () => {
 });
 
 describe("#groups.list", () => {
+  it("does not allow userId to bypass restricted group discovery", async () => {
+    const viewer = await buildViewer();
+    viewer.team.setPreference(
+      TeamPreference.RestrictUserAndGroupDiscovery,
+      true
+    );
+    await viewer.team.save();
+    const admin = await buildAdmin({ teamId: viewer.teamId });
+    const unrelatedUser = await buildViewer({ teamId: viewer.teamId });
+    const gsz = await buildGroup({
+      teamId: viewer.teamId,
+      userId: admin.id,
+    });
+    const unrelated = await buildGroup({
+      teamId: viewer.teamId,
+      userId: admin.id,
+    });
+    await Promise.all([
+      gsz.$add("user", viewer, { through: { createdById: admin.id } }),
+      unrelated.$add("user", unrelatedUser, {
+        through: { createdById: admin.id },
+      }),
+    ]);
+    const collection = await buildCollection({
+      teamId: viewer.teamId,
+      userId: admin.id,
+      permission: null,
+    });
+    await collection.$add("group", gsz, {
+      through: {
+        permission: CollectionPermission.ReadWrite,
+        createdById: admin.id,
+      },
+    });
+
+    const res = await server.post("/api/groups.list", viewer, {
+      body: { userId: unrelatedUser.id },
+    });
+    const body = await res.json();
+
+    expect(res.status).toEqual(200);
+    expect(body.data.groups).toHaveLength(0);
+  });
+
   it("should require authentication", async () => {
     const res = await server.post("/api/groups.list");
     const body = await res.json();
@@ -403,6 +453,25 @@ describe("#groups.list", () => {
 });
 
 describe("#groups.info", () => {
+  it("does not allow externalId to bypass restricted group discovery", async () => {
+    const viewer = await buildViewer();
+    viewer.team.setPreference(
+      TeamPreference.RestrictUserAndGroupDiscovery,
+      true
+    );
+    await viewer.team.save();
+    const group = await buildGroup({
+      teamId: viewer.teamId,
+      externalId: "hidden-external-id",
+    });
+
+    const res = await server.post("/api/groups.info", viewer, {
+      body: { externalId: group.externalId },
+    });
+
+    expect(res.status).toEqual(403);
+  });
+
   it("should return group if admin", async () => {
     const user = await buildAdmin();
     const group = await buildGroup({
@@ -542,6 +611,22 @@ describe("#groups.delete", () => {
 });
 
 describe("#groups.memberships", () => {
+  it("does not expose memberships for a hidden group", async () => {
+    const viewer = await buildViewer();
+    viewer.team.setPreference(
+      TeamPreference.RestrictUserAndGroupDiscovery,
+      true
+    );
+    await viewer.team.save();
+    const group = await buildGroup({ teamId: viewer.teamId });
+
+    const res = await server.post("/api/groups.memberships", viewer, {
+      body: { id: group.id },
+    });
+
+    expect(res.status).toEqual(403);
+  });
+
   it("should return members in a group", async () => {
     const user = await buildUser();
     const group = await buildGroup({

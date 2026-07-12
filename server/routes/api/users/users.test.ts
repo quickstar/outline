@@ -7,6 +7,7 @@ import {
   buildAdmin,
   buildUser,
   buildInvite,
+  buildGroup,
   buildViewer,
 } from "@server/test/factories";
 import { getTestServer } from "@server/test/support";
@@ -21,6 +22,40 @@ afterAll(() => {
 });
 
 describe("#users.list", () => {
+  it("does not allow ids to bypass restricted user discovery", async () => {
+    const team = await buildTeam();
+    team.setPreference(TeamPreference.RestrictUserAndGroupDiscovery, true);
+    await team.save();
+    const viewer = await buildViewer({ teamId: team.id });
+    const colleague = await buildViewer({ teamId: team.id });
+    const unrelated = await buildViewer({ teamId: team.id });
+    const group = await buildGroup({ teamId: team.id });
+    await Promise.all([
+      group.$add("user", viewer, {
+        through: { createdById: viewer.id },
+      }),
+      group.$add("user", colleague, {
+        through: { createdById: viewer.id },
+      }),
+    ]);
+
+    const hiddenRes = await server.post("/api/users.list", viewer, {
+      body: { ids: [unrelated.id] },
+    });
+    const hiddenBody = await hiddenRes.json();
+    expect(hiddenRes.status).toEqual(200);
+    expect(hiddenBody.data).toHaveLength(0);
+
+    const visibleRes = await server.post("/api/users.list", viewer, {
+      body: { ids: [colleague.id] },
+    });
+    const visibleBody = await visibleRes.json();
+    expect(visibleRes.status).toEqual(200);
+    expect(visibleBody.data.map((user: { id: string }) => user.id)).toEqual([
+      colleague.id,
+    ]);
+  });
+
   it("should return users whose emails match the query", async () => {
     const user = await buildUser({
       name: "John Doe",
@@ -347,6 +382,22 @@ describe("#users.list", () => {
 });
 
 describe("#users.info", () => {
+  it("does not expose a user outside restricted discovery", async () => {
+    const viewer = await buildViewer();
+    viewer.team.setPreference(
+      TeamPreference.RestrictUserAndGroupDiscovery,
+      true
+    );
+    await viewer.team.save();
+    const unrelated = await buildViewer({ teamId: viewer.teamId });
+
+    const res = await server.post("/api/users.info", viewer, {
+      body: { id: unrelated.id },
+    });
+
+    expect(res.status).toEqual(403);
+  });
+
   it("should return current user with no id", async () => {
     const user = await buildUser();
     const res = await server.post("/api/users.info", user);

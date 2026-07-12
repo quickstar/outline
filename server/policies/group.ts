@@ -1,4 +1,5 @@
 import { Group, User, Team } from "@server/models";
+import { isDiscoveryRestricted } from "@server/utils/DiscoveryScope";
 import { allow } from "./cancan";
 import {
   and,
@@ -6,6 +7,7 @@ import {
   isTeamModel,
   isTeamMutable,
   isGroupAdmin,
+  or,
 } from "./utils";
 
 allow(User, "createGroup", Team, (actor, team) =>
@@ -20,7 +22,7 @@ allow(User, "listGroups", Team, (actor, team) =>
   and(
     //
     isTeamModel(actor, team),
-    !actor.isGuest
+    or(!actor.isGuest, isDiscoveryRestricted(actor))
   )
 );
 

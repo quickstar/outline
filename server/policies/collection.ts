@@ -1,7 +1,8 @@
 import invariant from "invariant";
 import { CollectionPermission } from "@shared/types";
 import { Collection, User, Team } from "@server/models";
-import { allow } from "./cancan";
+import { isDiscoveryRestricted } from "@server/utils/DiscoveryScope";
+import { allow, can } from "./cancan";
 import { and, isTeamAdmin, isTeamModel, isTeamMutable, or } from "./utils";
 
 allow(User, "createCollection", Team, (actor, team) =>
@@ -182,6 +183,14 @@ allow(User, ["update", "export", "archive"], Collection, (user, collection) =>
       isTeamAdmin(user, collection),
       includesMembership(collection, [CollectionPermission.Admin])
     )
+  )
+);
+
+allow(User, "manageUsers", Collection, (user, collection) =>
+  and(
+    !isDiscoveryRestricted(user),
+    isTeamMutable(user),
+    can(user, "update", collection)
   )
 );
 

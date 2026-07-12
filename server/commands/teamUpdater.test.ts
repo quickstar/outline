@@ -6,6 +6,27 @@ import teamUpdater from "./teamUpdater";
 
 describe("teamUpdater", () => {
   describe("preferences", () => {
+    it("should update user and group discovery restriction", async () => {
+      const team = await buildTeam();
+      const user = await buildUser({ teamId: team.id });
+
+      const updatedTeam = await withAPIContext(user, (ctx) =>
+        teamUpdater(ctx, {
+          params: {
+            preferences: {
+              [TeamPreference.RestrictUserAndGroupDiscovery]: true,
+            },
+          },
+          user,
+          team,
+        })
+      );
+
+      expect(
+        updatedTeam.getPreference(TeamPreference.RestrictUserAndGroupDiscovery)
+      ).toEqual(true);
+    });
+
     it("should update preference when value changes", async () => {
       const team = await buildTeam();
       const user = await buildUser({ teamId: team.id });

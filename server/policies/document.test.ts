@@ -647,4 +647,29 @@ describe("manage document", () => {
       expect(abilities.share).toEqual(false);
     });
   }
+
+  it("disables user management for a restricted viewer", async () => {
+    const team = await buildTeam();
+    team.setPreference(TeamPreference.RestrictUserAndGroupDiscovery, true);
+    await team.save();
+    const viewer = await buildUser({
+      teamId: team.id,
+      role: UserRole.Viewer,
+    });
+    const document = await buildDocument({ teamId: team.id });
+    await UserMembership.create({
+      userId: viewer.id,
+      documentId: document.id,
+      permission: DocumentPermission.Admin,
+      createdById: viewer.id,
+    });
+
+    const reloaded = await Document.findByPk(document.id, {
+      userId: viewer.id,
+    });
+    const abilities = serialize(viewer, reloaded);
+
+    expect(abilities.update).toBeTruthy();
+    expect(abilities.manageUsers).toEqual(false);
+  });
 });

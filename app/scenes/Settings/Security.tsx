@@ -172,6 +172,17 @@ function Security() {
     [saveData, team.preferences]
   );
 
+  const handleRestrictUserAndGroupDiscoveryChange = React.useCallback(
+    async (checked: boolean) => {
+      const preferences = {
+        ...team.preferences,
+        [TeamPreference.RestrictUserAndGroupDiscovery]: checked,
+      };
+      await saveData({ preferences });
+    },
+    [saveData, team.preferences]
+  );
+
   const handleMembersCanDeleteAccountChange = React.useCallback(
     async (checked: boolean) => {
       const preferences = {
@@ -338,6 +349,21 @@ function Security() {
           id={TeamPreference.ViewersCanExport}
           checked={team.getPreference(TeamPreference.ViewersCanExport)}
           onChange={handleViewersCanExportChange}
+        />
+      </SettingRow>
+      <SettingRow
+        label={t("Restrict people and group discovery")}
+        name={TeamPreference.RestrictUserAndGroupDiscovery}
+        description={t(
+          "Viewers and guests can only find people and groups that share access to the same documents or collections"
+        )}
+      >
+        <Switch
+          id={TeamPreference.RestrictUserAndGroupDiscovery}
+          checked={team.getPreference(
+            TeamPreference.RestrictUserAndGroupDiscovery
+          )}
+          onChange={handleRestrictUserAndGroupDiscoveryChange}
         />
       </SettingRow>
       <SettingRow

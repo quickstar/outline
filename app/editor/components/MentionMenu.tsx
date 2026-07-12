@@ -37,6 +37,8 @@ import {
 import useRequest from "~/hooks/useRequest";
 import useStores from "~/hooks/useStores";
 import useUserLocale from "~/hooks/useUserLocale";
+import type Group from "~/models/Group";
+import type User from "~/models/User";
 import { client } from "~/utils/ApiClient";
 import type { Props as SuggestionsMenuProps } from "./SuggestionsMenu";
 import SuggestionsMenu from "./SuggestionsMenu";
@@ -59,11 +61,14 @@ type Props = Omit<
 
 function MentionMenu({ search = "", isActive, ...rest }: Props) {
   const [loaded, setLoaded] = useState(false);
+  const [visibleUserIds, setVisibleUserIds] = useState<string[]>([]);
+  const [visibleGroupIds, setVisibleGroupIds] = useState<string[]>([]);
   const { t } = useTranslation();
   const { auth, documents, users, collections, groups } = useStores();
   const actorId = auth.currentUserId;
   const location = useLocation();
-  const documentId = parseDocumentSlug(location.pathname);
+  const documentSlug = parseDocumentSlug(location.pathname);
+  const documentId = documentSlug ? documents.get(documentSlug)?.id : undefined;
   const userLocale = useUserLocale();
   const maxResultsInSection = search ? 25 : 5;
 
@@ -126,9 +131,12 @@ function MentionMenu({ search = "", isActive, ...rest }: Props) {
 
   const { loading, request } = useRequest(
     useCallback(async () => {
+      setVisibleUserIds([]);
+      setVisibleGroupIds([]);
       const res = await client.post("/suggestions.mention", {
         query: search,
         limit: maxResultsInSection,
+        documentId,
       });
 
       runInAction(() => {
@@ -137,7 +145,17 @@ function MentionMenu({ search = "", isActive, ...rest }: Props) {
         res.data.collections.map(collections.add);
         res.data.groups.map(groups.add);
       });
-    }, [search, documents, users, collections, groups, maxResultsInSection])
+      setVisibleUserIds(res.data.users.map((user: User) => user.id));
+      setVisibleGroupIds(res.data.groups.map((group: Group) => group.id));
+    }, [
+      search,
+      documents,
+      users,
+      collections,
+      groups,
+      maxResultsInSection,
+      documentId,
+    ])
   );
 
   useEffect(() => {
@@ -155,9 +173,17 @@ function MentionMenu({ search = "", isActive, ...rest }: Props) {
   // Computed in the render body so MobX observer can track store access
   // (e.g. searchSuppressed). Previously this lived inside a useEffect which
   // runs outside the reactive context and triggered MobX warnings.
+  const visibleUsers = visibleUserIds.flatMap((id) => {
+    const user = users.get(id);
+    return user ? [user] : [];
+  });
+  const visibleGroups = visibleGroupIds.flatMap((id) => {
+    const group = groups.get(id);
+    return group ? [group] : [];
+  });
+
   const mentionItems: MentionItem[] = actorId
-    ? users
-        .findByQuery(search, { maxResults: maxResultsInSection })
+    ? visibleUsers
         .map(
           (user) =>
             ({
@@ -188,33 +214,31 @@ function MentionMenu({ search = "", isActive, ...rest }: Props) {
             }) as MentionItem
         )
         .concat(
-          groups
-            .findByQuery(search, { maxResults: maxResultsInSection })
-            .map((group) => ({
-              name: "mention",
-              icon: (
-                <Flex
-                  align="center"
-                  justify="center"
-                  style={{ width: 24, height: 24, marginRight: 4 }}
-                >
-                  <GroupAvatar group={group} size={AvatarSize.Small} />
-                </Flex>
-              ),
-              title: group.name,
-              subtitle: t("{{ count }} members", {
-                count: group.memberCount,
-              }),
-              section: GroupSection,
-              appendSpace: true,
-              attrs: {
-                id: uuidv4(),
-                type: MentionType.Group,
-                modelId: group.id,
-                actorId,
-                label: group.name,
-              },
-            }))
+          visibleGroups.map((group) => ({
+            name: "mention",
+            icon: (
+              <Flex
+                align="center"
+                justify="center"
+                style={{ width: 24, height: 24, marginRight: 4 }}
+              >
+                <GroupAvatar group={group} size={AvatarSize.Small} />
+              </Flex>
+            ),
+            title: group.name,
+            subtitle: t("{{ count }} members", {
+              count: group.memberCount,
+            }),
+            section: GroupSection,
+            appendSpace: true,
+            attrs: {
+              id: uuidv4(),
+              type: MentionType.Group,
+              modelId: group.id,
+              actorId,
+              label: group.name,
+            },
+          }))
         )
         .concat(
           documents

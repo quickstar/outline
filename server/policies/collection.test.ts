@@ -1,4 +1,4 @@
-import { CollectionPermission, UserRole } from "@shared/types";
+import { CollectionPermission, TeamPreference, UserRole } from "@shared/types";
 import { UserMembership, Collection } from "@server/models";
 import {
   buildUser,
@@ -275,6 +275,39 @@ describe("member", () => {
       expect(abilities.update).toEqual(false);
       expect(abilities.archive).toEqual(false);
     });
+  });
+});
+
+describe("user and group discovery restriction", () => {
+  it("only disables collection access management for viewers", async () => {
+    const team = await buildTeam();
+    team.setPreference(TeamPreference.RestrictUserAndGroupDiscovery, true);
+    await team.save();
+    const admin = await buildAdmin({ teamId: team.id });
+    const viewer = await buildUser({
+      teamId: team.id,
+      role: UserRole.Viewer,
+    });
+    const collection = await buildCollection({
+      teamId: team.id,
+      permission: null,
+    });
+    await collection.$add("user", viewer, {
+      through: {
+        permission: CollectionPermission.Admin,
+        createdById: admin.id,
+      },
+    });
+
+    const reloaded = await Collection.findByPk(collection.id, {
+      userId: viewer.id,
+    });
+    const abilities = serialize(viewer, reloaded);
+
+    expect(abilities.update).toBeTruthy();
+    expect(abilities.export).toBeTruthy();
+    expect(abilities.archive).toBeTruthy();
+    expect(abilities.manageUsers).toEqual(false);
   });
 });
 

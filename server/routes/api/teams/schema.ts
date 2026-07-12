@@ -75,6 +75,8 @@ export const TeamsUpdateSchema = BaseSchema.extend({
         mcp: z.boolean().optional(),
         /** List of disabled embed provider titles. */
         disabledEmbeds: z.array(z.string()).optional(),
+        /** Whether viewers and guests have restricted user and group discovery. */
+        restrictUserAndGroupDiscovery: z.boolean().optional(),
       })
       .optional(),
   }),

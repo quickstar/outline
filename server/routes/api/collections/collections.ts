@@ -208,7 +208,7 @@ router.post(
       Collection.findByPk(id, { userId: user.id, transaction }),
       Group.findByPk(groupId, { transaction }),
     ]);
-    authorize(user, "update", collection);
+    authorize(user, "manageUsers", collection);
     authorize(user, "read", group);
 
     let membership = await GroupMembership.findOne({
@@ -264,7 +264,7 @@ router.post(
         transaction,
       }),
     ]);
-    authorize(user, "update", collection);
+    authorize(user, "manageUsers", collection);
     authorize(user, "read", group);
 
     const [membership] = await collection.$get("groupMemberships", {
@@ -368,7 +368,7 @@ router.post(
       Collection.findByPk(id, { userId: actor.id, transaction }),
       User.findByPk(userId, { transaction }),
     ]);
-    authorize(actor, "update", collection);
+    authorize(actor, "manageUsers", collection);
     authorize(actor, "read", user);
 
     let membership = await UserMembership.findOne({
@@ -418,7 +418,7 @@ router.post(
       Collection.findByPk(id, { userId: actor.id, transaction }),
       User.findByPk(userId, { transaction }),
     ]);
-    authorize(actor, "update", collection);
+    authorize(actor, "manageUsers", collection);
     authorize(actor, "read", user);
 
     const [membership] = await collection.$get("memberships", {

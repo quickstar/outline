@@ -24,6 +24,7 @@ import { presentUser, presentPolicies } from "@server/presenters";
 import type { APIContext } from "@server/types";
 import { RateLimiterStrategy } from "@server/utils/RateLimiter";
 import { safeEqual } from "@server/utils/crypto";
+import { getUserDiscoveryFilter } from "@server/utils/DiscoveryScope";
 import { getDetailsForEmailUpdateToken } from "@server/utils/jwt";
 import pagination from "../middlewares/pagination";
 import * as T from "./schema";
@@ -40,6 +41,8 @@ router.post(
       ctx.input.body;
 
     const actor = ctx.state.auth.user;
+    const directoryFilter = getUserDiscoveryFilter(actor);
+
     let where: WhereOptions<User> = {
       teamId: actor.teamId,
     };
@@ -122,48 +125,44 @@ router.post(
       };
     }
 
-    if (query) {
-      where = {
-        ...where,
-        [Op.and]: {
-          [Op.or]: [
-            Sequelize.literal(
-              `unaccent(LOWER(email)) like unaccent(LOWER(:query))`
-            ),
-            Sequelize.literal(
-              `unaccent(LOWER(name)) like unaccent(LOWER(:query))`
-            ),
-          ],
-        },
-      };
-    }
+    const finalWhere: WhereOptions<User> = {
+      [Op.and]: [
+        directoryFilter.where,
+        where,
+        ...(query
+          ? [
+              {
+                [Op.or]: [
+                  Sequelize.literal(
+                    `unaccent(LOWER(email)) like unaccent(LOWER(:query))`
+                  ),
+                  Sequelize.literal(
+                    `unaccent(LOWER(name)) like unaccent(LOWER(:query))`
+                  ),
+                ],
+              },
+            ]
+          : []),
+        ...(ids ? [{ id: ids }] : []),
+        ...(emails ? [{ email: emails }] : []),
+      ],
+    };
 
-    if (ids) {
-      where = {
-        ...where,
-        id: ids,
-      };
-    }
-
-    if (emails) {
-      where = {
-        ...where,
-        email: emails,
-      };
-    }
-
-    const replacements = { query: `%${query}%` };
+    const replacements = {
+      ...directoryFilter.replacements,
+      query: `%${query}%`,
+    };
 
     const [users, total] = await Promise.all([
       User.findAll({
-        where,
+        where: finalWhere,
         replacements,
         order: [[sort, direction]],
         offset: ctx.state.pagination.offset,
         limit: ctx.state.pagination.limit,
       }),
       User.count({
-        where,
+        where: finalWhere,
         // @ts-expect-error Types are incorrect for count
         replacements,
       }),
@@ -189,7 +188,15 @@ router.post(
   async (ctx: APIContext<T.UsersInfoReq>) => {
     const { id } = ctx.input.body;
     const actor = ctx.state.auth.user;
-    const user = id ? await User.findByPk(id) : actor;
+    const directoryFilter = getUserDiscoveryFilter(actor);
+    const user = id
+      ? await User.findOne({
+          where: {
+            [Op.and]: [{ id }, directoryFilter.where],
+          },
+          replacements: directoryFilter.replacements,
+        })
+      : actor;
     authorize(actor, "read", user);
     const includeDetails = !!can(actor, "readDetails", user);
 

@@ -23,6 +23,10 @@ import {
   presentUser,
 } from "@server/presenters";
 import type { APIContext } from "@server/types";
+import {
+  getGroupDiscoveryFilter,
+  isDiscoveryRestricted,
+} from "@server/utils/DiscoveryScope";
 import { RateLimiterStrategy } from "@server/utils/RateLimiter";
 import pagination from "../middlewares/pagination";
 import * as T from "./schema";
@@ -53,32 +57,29 @@ router.post(
       ctx.input.body;
     const { user } = ctx.state.auth;
     authorize(user, "listGroups", user.team);
+    const directoryFilter = getGroupDiscoveryFilter(user);
 
-    let where: WhereOptions<Group> = {
-      teamId: user.teamId,
-    };
+    const filters: WhereOptions<Group>[] = [
+      directoryFilter.where,
+      { teamId: user.teamId },
+    ];
 
     if (name) {
-      where = {
-        ...where,
+      filters.push({
         name: {
           [Op.eq]: name,
         },
-      };
+      });
     } else if (query) {
-      where = {
-        ...where,
+      filters.push({
         name: {
           [Op.iLike]: `%${query}%`,
         },
-      };
+      });
     }
 
     if (externalId) {
-      where = {
-        ...where,
-        externalId,
-      };
+      filters.push({ externalId });
     }
 
     if (userId) {
@@ -88,12 +89,7 @@ router.post(
         })
         .then((groups) => groups.map((g) => g.id));
 
-      where = {
-        ...where,
-        id: {
-          [Op.in]: groupIds,
-        },
-      };
+      filters.push({ id: { [Op.in]: groupIds } });
     }
 
     if (source) {
@@ -119,18 +115,21 @@ router.post(
         egs.map((eg) => eg.groupId).filter((id): id is string => id !== null)
       );
 
-      where = {
-        ...where,
+      filters.push({
         id: {
-          ...((where.id as object) ?? {}),
           [source === "manual" ? Op.notIn : Op.in]: sourceGroupIds,
         },
-      };
+      });
     }
+
+    const finalWhere: WhereOptions<Group> = {
+      [Op.and]: filters,
+    };
 
     const [groups, total] = await Promise.all([
       Group.findAll({
-        where,
+        where: finalWhere,
+        replacements: directoryFilter.replacements,
         include: [
           {
             model: GroupUser,
@@ -156,7 +155,9 @@ router.post(
         limit: ctx.state.pagination.limit,
       }),
       Group.count({
-        where,
+        where: finalWhere,
+        // @ts-expect-error Types are incorrect for count
+        replacements: directoryFilter.replacements,
       }),
     ]);
 
@@ -196,6 +197,7 @@ router.post(
   async (ctx: APIContext<T.GroupsInfoReq>) => {
     const { id, externalId } = ctx.input.body;
     const { user } = ctx.state.auth;
+    const directoryFilter = getGroupDiscoveryFilter(user);
 
     const include = [
       {
@@ -209,16 +211,23 @@ router.post(
       externalGroupInclude,
     ];
 
-    const group = id
-      ? await Group.findByPk(id, { include })
-      : externalId
+    const group =
+      id || externalId
         ? await Group.findOne({
             include,
-            where: { teamId: user.teamId, externalId },
+            where: {
+              [Op.and]: [
+                directoryFilter.where,
+                { teamId: user.teamId },
+                ...(id ? [{ id }] : []),
+                ...(externalId ? [{ externalId }] : []),
+              ],
+            },
+            replacements: directoryFilter.replacements,
           })
         : null;
 
-    authorize(user, "read", group);
+    authorizeGroupDiscoveryAccess(user, group);
 
     ctx.body = {
       data: await presentGroup(group),
@@ -382,9 +391,14 @@ router.post(
   async (ctx: APIContext<T.GroupsMembershipsReq>) => {
     const { id, query, permission } = ctx.input.body;
     const { user } = ctx.state.auth;
-
-    const group = await Group.findByPk(id);
-    authorize(user, "read", group);
+    const directoryFilter = getGroupDiscoveryFilter(user);
+    const group = await Group.findOne({
+      where: {
+        [Op.and]: [{ id }, directoryFilter.where],
+      },
+      replacements: directoryFilter.replacements,
+    });
+    authorizeGroupDiscoveryAccess(user, group);
     let userWhere;
 
     if (query) {
@@ -627,3 +641,14 @@ router.post(
 );
 
 export default router;
+
+function authorizeGroupDiscoveryAccess(
+  user: User,
+  group: Group | null
+): asserts group is Group {
+  if (isDiscoveryRestricted(user) && group) {
+    return;
+  }
+
+  authorize(user, "read", group);
+}
