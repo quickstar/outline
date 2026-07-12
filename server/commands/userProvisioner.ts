@@ -30,6 +30,8 @@ type Props = {
    * Matching an existing account by email only happens when explicitly true.
    */
   emailVerified?: boolean;
+  /** The provider-controlled domain used for workspace authorization. */
+  authenticationDomain?: string;
   /** The display name of the authentication provider, eg "Google". */
   authenticationProviderName?: string;
   /** The language of the user, if known */
@@ -65,6 +67,7 @@ export default async function userProvisioner(
     name,
     email,
     emailVerified,
+    authenticationDomain,
     authenticationProviderName,
     role,
     language,
@@ -250,7 +253,7 @@ export default async function userProvisioner(
 
     // If the team settings do not allow this domain,
     // throw an error and fail user creation.
-    if (team && !(await team.isDomainAllowed(email))) {
+    if (team && !(await team.isDomainAllowed(authenticationDomain ?? email))) {
       throw DomainNotAllowedError();
     }
 

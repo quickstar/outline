@@ -377,6 +377,88 @@ describe("accountProvisioner", () => {
       expect(collectionCount).toEqual(1);
     });
 
+    it("should authorize with the provider domain and preserve the contact email", async () => {
+      const team = await buildTeam();
+      const admin = await buildAdmin({ teamId: team.id });
+      const authenticationProviders = await team.$get(
+        "authenticationProviders"
+      );
+      const authenticationProvider = authenticationProviders[0];
+      const authenticationDomain = faker.internet.domainName();
+      const email = faker.internet.email();
+
+      await TeamDomain.create({
+        teamId: team.id,
+        name: authenticationDomain,
+        createdById: admin.id,
+      });
+
+      const { user, isNewUser } = await accountProvisioner(ctx, {
+        user: {
+          name: "Jenny Tester",
+          email,
+          emailVerified: true,
+        },
+        team: {
+          teamId: team.id,
+          domain: authenticationDomain,
+          subdomain: faker.internet.domainWord(),
+        },
+        authenticationProvider: {
+          name: authenticationProvider.name,
+          providerId: authenticationProvider.providerId,
+        },
+        authentication: {
+          providerId: randomUUID(),
+          accessToken: "123",
+          scopes: ["read"],
+        },
+      });
+
+      expect(user.email).toEqual(email);
+      expect(isNewUser).toEqual(true);
+    });
+
+    it("should reject a disallowed provider domain", async () => {
+      const team = await buildTeam();
+      const admin = await buildAdmin({ teamId: team.id });
+      const authenticationProviders = await team.$get(
+        "authenticationProviders"
+      );
+      const authenticationProvider = authenticationProviders[0];
+      const allowedDomain = faker.internet.domainName();
+
+      await TeamDomain.create({
+        teamId: team.id,
+        name: allowedDomain,
+        createdById: admin.id,
+      });
+
+      await expect(
+        accountProvisioner(ctx, {
+          user: {
+            name: "Jenny Tester",
+            email: faker.internet.email({ provider: allowedDomain }),
+            emailVerified: true,
+          },
+          team: {
+            teamId: team.id,
+            domain: faker.internet.domainName(),
+            subdomain: faker.internet.domainWord(),
+          },
+          authenticationProvider: {
+            name: authenticationProvider.name,
+            providerId: authenticationProvider.providerId,
+          },
+          authentication: {
+            providerId: randomUUID(),
+            accessToken: "123",
+            scopes: ["read"],
+          },
+        })
+      ).rejects.toThrow("The domain is not allowed for this workspace");
+    });
+
     it("should create a new user in an existing team", async () => {
       const team = await buildTeam();
       const authenticationProviders = await team.$get(

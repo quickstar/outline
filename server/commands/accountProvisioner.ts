@@ -187,6 +187,7 @@ async function accountProvisioner(
     name: userParams.name,
     email: userParams.email,
     emailVerified: userParams.emailVerified,
+    authenticationDomain: teamParams.domain,
     authenticationProviderName: AuthenticationHelper.getProviderName(
       authenticationProviderParams.name
     ),

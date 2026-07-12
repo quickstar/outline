@@ -6,7 +6,6 @@ import Router from "koa-router";
 import type { Profile } from "passport";
 import { toError } from "@shared/utils/error";
 import { slugifyDomain } from "@shared/utils/domains";
-import { parseEmail } from "@shared/utils/email";
 import accountProvisioner from "@server/commands/accountProvisioner";
 import { MicrosoftGraphError } from "@server/errors";
 import passportMiddleware from "@server/middlewares/passport";
@@ -28,6 +27,10 @@ import UploadUserAvatarTask from "@server/queues/tasks/UploadUserAvatarTask";
 import AttachmentHelper from "@server/models/helpers/AttachmentHelper";
 import { AttachmentPreset } from "@shared/types";
 import { UserFlag } from "@server/models/User";
+import {
+  resolveAzureIdentity,
+  type AzureGraphProfile,
+} from "./resolveIdentity";
 
 const router = new Router();
 const scopes: string[] = [];
@@ -106,7 +109,11 @@ if (env.AZURE_CLIENT_ID && env.AZURE_CLIENT_SECRET) {
         const [profileResponse, organizationResponse] = await Promise.all([
           // Load the users profile from the Microsoft Graph API
           // https://docs.microsoft.com/en-us/graph/api/resources/users?view=graph-rest-1.0
-          request("GET", `https://graph.microsoft.com/v1.0/me`, accessToken),
+          request<AzureGraphProfile>(
+            "GET",
+            `https://graph.microsoft.com/v1.0/me`,
+            accessToken
+          ),
           // Load the organization profile from the Microsoft Graph API
           // https://docs.microsoft.com/en-us/graph/api/organization-get?view=graph-rest-1.0
           request(
@@ -130,51 +137,15 @@ if (env.AZURE_CLIENT_ID && env.AZURE_CLIENT_SECRET) {
 
         const organization = organizationResponse.value[0];
 
-        // Note: userPrincipalName is last here for backwards compatibility with
-        // previous versions of Outline that did not include it.
-        const email =
-          profile.email ||
-          profileResponse.mail ||
-          profileResponse.userPrincipalName;
-
-        if (!email) {
-          throw MicrosoftGraphError(
-            "'email' property is required but could not be found in user profile."
-          );
-        }
-
         const team = await getTeamFromContext(context);
         const client = getClientFromOAuthState(context);
         const user =
           context.state?.auth?.user ?? (await getUserFromOAuthState(context));
 
-        // The mail and userPrincipalName values come from the directory via the
-        // Graph API and are owned by the organization, so an email sourced from
-        // them is inherently trusted. Microsoft's mutable `email` token claim is
-        // only trusted when a verification claim confirms it — xms_edov for
-        // workforce tenants, or the standard email_verified claim in External ID
-        // / OIDC scenarios.
-        // https://learn.microsoft.com/en-us/entra/identity-platform/reference-claims-customization
-        const directoryEmails = [
-          profileResponse.mail,
-          profileResponse.userPrincipalName,
-        ]
-          .filter(Boolean)
-          .map((value) => value.toLowerCase());
-
-        const verificationClaims = [
-          profile.xms_edov,
-          profile.email_verified,
-        ].filter((claim) => claim !== undefined);
-        const emailVerified =
-          directoryEmails.includes(email.toLowerCase()) ||
-          (verificationClaims.length
-            ? verificationClaims.some(
-                (claim) => claim === true || claim === "true"
-              )
-            : undefined);
-
-        const domain = parseEmail(email).domain;
+        const { email, emailVerified, domain } = resolveAzureIdentity(
+          profile,
+          profileResponse
+        );
         const subdomain = slugifyDomain(domain);
 
         const teamName = organization.displayName;
